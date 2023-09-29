@@ -1,6 +1,18 @@
 // Define a global object to store the current page's path
 const global = {
     currentPage: window.location.pathname,
+    search :{
+      term:'',
+      type:'',
+      page:1,
+      totalPages:1,
+      totalResults:0
+    },
+api: {
+  apiKey:'961982a158676f91c267e8d7ef5d113c',
+  apiUrl:'https://api.themoviedb.org/3/'
+}
+
   };
   
   // Asynchronously fetch and display popular movies
@@ -241,8 +253,118 @@ const global = {
     }
 }
 
-// Display Slider movies
+// search movies/shows
+async function search(){
+  const queryString = window.location.search;
+  const urlParams = new URLSearchParams(queryString);
+  global.search.type = urlParams.get('type');//
+  global.search.term = urlParams.get('search-term');//
 
+  if(global.search.term !== '' && global.search.term !== null){
+    const {results,total_pages, page,total_results} = await searchAPIData();
+    
+    global.search.page = page;
+    global.search.totalPages = total_pages;
+    global.search.totalResults = total_results;
+
+    if(results.length === 0){
+      showAlert('No results found');
+      return;
+    
+    }
+
+    displaySearchResults(results);
+
+    document.querySelector('#search-term').value = '';
+
+  }
+  else{
+  showAlert('Please enter a search term');
+  }
+}
+
+function displaySearchResults(results){
+ 
+  // clear previous results
+  document.querySelector('#search-results').innerHTML = '';
+  document.querySelector('#search-results-heading').innerHTML = '';
+  document.querySelector('#pagination').innerHTML = '';
+
+  // display results
+  results.forEach((result) => {
+    const div = document.createElement('div');
+    div.classList.add('card');
+    div.innerHTML = `
+      <a href="${global.search.type}-details.html?id=${result.id}">
+        ${
+          result.poster_path
+            ? `<img
+          src="https://image.tmdb.org/t/p/w500/${result.poster_path}"
+          class="card-img-top"
+          alt="${global.search.type==='movie'?result.title:result.name}"
+        />`
+            : `<img
+        src="../images/no-image.jpg"
+        class="card-img-top"
+        alt="${global.search.type==='movie'?result.title:result.name}"
+      />`
+        }
+      </a>
+      <div class="card-body">
+        <h5 class="card-title">${global.search.type==='movie'?result.title:result.name}</h5>
+        <p class="card-text">
+          <small class="text-muted">Release:${global.search.type==='movie'?result.release_date:result.first_air_date}</small>
+        </p>
+      </div>
+    `;
+
+    document.querySelector('#search-results-heading').innerHTML = `<h2>${results.length} of ${global.search.totalResults} Results for ${global.search.term}
+    </h2>`;
+
+    document.querySelector('#search-results').appendChild(div);
+});
+displayPagination();
+
+}
+
+
+// create and display pagination for search
+function displayPagination(){
+const div = document.createElement('div');
+div.classList.add('pagination');
+div.innerHTML = `	<button class="btn btn-primary" id="prev">Prev</button>
+<button class="btn btn-primary" id="next">Next</button>
+<div class="page-counter">Page ${global.search.page} of ${global.search.totalPages}</div>
+`;
+
+document.querySelector('#pagination').appendChild(div); 
+
+// disable prev on 1st page 
+if(global.search.page===1){
+  document.querySelector('#prev').disabled = true;
+}
+
+// disable next on last page
+if(global.search.page===global.search.totalPages){
+  document.querySelector('#next').disabled = true;
+}
+
+// add event listener for next page
+document.querySelector('#next').addEventListener('click',async()=>{
+global.search.page++;
+const{results,total_pages} = await searchAPIData();
+displaySearchResults(results);
+});
+// add event listener for prev page
+document.querySelector('#prev').addEventListener('click',async()=>{
+  global.search.page--;
+  const{results,total_pages} = await searchAPIData();
+  displaySearchResults(results);
+  });
+  
+}
+
+// Display Slider movies
 async function displaySlider(){
 
 const {results} = await fetchAPIData('movie/now_playing');
@@ -264,7 +386,7 @@ results.forEach((movie) => {
     initSwiper();
 });
 }
-
+// will change and play with this(later )
 function initSwiper(){
     const swiper = new Swiper('.swiper',{
     slidesPerView : 1,
@@ -293,8 +415,10 @@ function initSwiper(){
 
   // Fetch data from TMDB API
   async function fetchAPIData(endpoint) {
-    const API_KEY = '961982a158676f91c267e8d7ef5d113c';
-    const API_URL = 'https://api.themoviedb.org/3/';
+
+
+    const API_KEY = global.api.apiKey;
+    const API_URL = global.api.apiUrl;
   
 
     showSpinner();
@@ -306,6 +430,28 @@ function initSwiper(){
   
     hideSpinner();
     return data;
+  
+  }
+  
+
+  // make request to search
+  async function searchAPIData() {
+
+    const API_KEY = global.api.apiKey;
+    const API_URL = global.api.apiUrl;
+  
+    showSpinner();
+  
+    // Asynchronously fetch data from the specified endpoint using the API key
+    const response = await fetch(`${API_URL}search/${global.search.type}?api_key=${API_KEY}&language=en-US&query=${global.search.term}&page=${global.search.page}`);
+  
+    // Parse the response JSON and return the data
+    const data = await response.json();
+   
+    hideSpinner();
+
+    return data;
+  
   }
   
 
@@ -317,6 +463,18 @@ function initSwiper(){
     document.querySelector('.spinner').classList.remove('show');
   }
 
+  // show  alert
+  function showAlert(message,className = 'error'){
+    const alertEl = document.createElement('div');
+    alertEl.classList.add('alert',className);
+    alertEl.appendChild(document.createTextNode(message));
+    document.querySelector('#alert').appendChild(alertEl);
+
+    setTimeout(()=>{alertEl.remove()},3000)
+
+  }
+  
+  
   function addCommasToNumber(numer){
     return numer.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 
@@ -365,7 +523,7 @@ function initSwiper(){
         displayShowDetails(); // Handle TV details page navigation or content display here
         break;
       case '/search.html':
-        console.log('Search'); // Handle search page navigation or content display here
+        search(); // Handle search page navigation or content display here
         break;
       // Add more cases for additional pages as needed
   
